@@ -30,11 +30,6 @@
 // Entries for sys.path
 Q(/lib)
 
-// Add these lines
-Q(calculator)
-Q(add)
-Q(subtract)
-
 // Matter module
 Q(matter)
 Q(start)

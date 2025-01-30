@@ -127,7 +127,6 @@ list(APPEND MICROPY_SOURCE_PORT
     machine_rtc.c
     machine_sdcard.c
     modespnow.c
-    modcalculator.c
     modmatter.c
     matter_main.cpp
 )
