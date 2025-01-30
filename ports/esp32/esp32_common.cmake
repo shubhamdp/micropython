@@ -127,6 +127,9 @@ list(APPEND MICROPY_SOURCE_PORT
     machine_rtc.c
     machine_sdcard.c
     modespnow.c
+    modcalculator.c
+    modmatter.c
+    matter_main.cpp
 )
 list(TRANSFORM MICROPY_SOURCE_PORT PREPEND ${MICROPY_PORT_DIR}/)
 list(APPEND MICROPY_SOURCE_PORT ${CMAKE_BINARY_DIR}/pins.c)
@@ -176,6 +179,9 @@ list(APPEND IDF_COMPONENTS
     ulp
     usb
     vfs
+    esp_matter
+    chip
+    bt
 )
 
 # Register the main IDF component.
@@ -189,6 +195,8 @@ idf_component_register(
         ${MICROPY_SOURCE_PORT}
         ${MICROPY_SOURCE_BOARD}
         ${MICROPY_SOURCE_TINYUSB}
+    PRIV_INCLUDE_DIRS
+        ${ESP_MATTER_PATH}/examples/common/utils
     INCLUDE_DIRS
         ${MICROPY_INC_CORE}
         ${MICROPY_INC_USERMOD}
@@ -196,11 +204,25 @@ idf_component_register(
         ${MICROPY_PORT_DIR}
         ${MICROPY_BOARD_DIR}
         ${CMAKE_BINARY_DIR}
+        "${MATTER_SDK_PATH}/src/lib"
+        "${MATTER_SDK_PATH}/third_party/nlassert/repo/include"
+        "${MATTER_SDK_PATH}/third_party/nlio/repo/include"
+        "${BUILD_DIR}/esp-idf/chip/gen/include"
+        "${MATTER_SDK_PATH}/src"
+        "${MATTER_SDK_PATH}/src/lib"
+        "${MATTER_SDK_PATH}/src/include"
+        "${MATTER_SDK_PATH}/third_party/nlfaultinjection/include"
+        "${MATTER_SDK_PATH}/third_party/nlassert/repo/include"
+        "${MATTER_SDK_PATH}/third_party/nlio/repo/include"
+        "${MATTER_SDK_PATH}/zzz_generated/app-common"
     LDFRAGMENTS
         linker.lf
     REQUIRES
         ${IDF_COMPONENTS}
 )
+
+set_property(TARGET ${COMPONENT_LIB} PROPERTY CXX_STANDARD 17)
+target_compile_options(${COMPONENT_LIB} PRIVATE "-DCHIP_HAVE_CONFIG_H")
 
 # Set the MicroPython target as the current (main) IDF component target.
 set(MICROPY_TARGET ${COMPONENT_TARGET})
@@ -221,6 +243,11 @@ target_compile_definitions(${MICROPY_TARGET} PUBLIC
     FFCONF_H=\"${MICROPY_OOFATFS_DIR}/ffconf.h\"
     LFS1_NO_MALLOC LFS1_NO_DEBUG LFS1_NO_WARN LFS1_NO_ERROR LFS1_NO_ASSERT
     LFS2_NO_MALLOC LFS2_NO_DEBUG LFS2_NO_WARN LFS2_NO_ERROR LFS2_NO_ASSERT
+)
+
+target_compile_definitions(${MICROPY_TARGET} PUBLIC
+  CHIP_SYSTEM_CONFIG_USE_LWIP
+  EXECUTABLE_COMPONENT_NAME="main_esp32s3"
 )
 
 # Disable some warnings to keep the build output clean.
