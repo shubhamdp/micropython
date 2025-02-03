@@ -97,6 +97,9 @@ erase:
 monitor:
 	$(call RUN_IDF_PY,$(DEVICE) monitor)
 
+menuconfig:
+	$(call RUN_IDF_PY,$(DEVICE) menuconfig)
+
 size:
 	$(call RUN_IDF_PY,size)
 
