@@ -25,10 +25,19 @@ typedef struct {
     mp_obj_t callback_function;    // The Python function to call
     uint8_t num_args;             // Number of arguments
     mp_obj_t args[];              // Variable-length array of arguments
-} generic_callback_item_t;
+} generic_callback_item_t;    
 
 static QueueHandle_t callback_queue = NULL;
-static mp_sched_node_t callback_node;
+static mp_sched_node_t callback_node1;
+static mp_sched_node_t callback_node2;
+static mp_sched_node_t callback_node3;
+
+// Simple storage for the attribute callback
+static mp_obj_t attribute_callback = mp_const_none;
+// for identify callback
+static mp_obj_t identify_callback = mp_const_none;
+// event callback
+static mp_obj_t event_callback = mp_const_none;
 
 // Generic scheduled callback that processes all queued items  
 static void process_generic_callbacks(mp_sched_node_t *node) {
@@ -40,24 +49,26 @@ static void process_generic_callbacks(mp_sched_node_t *node) {
         if (item->callback_function != mp_const_none) {
             // Call the Python function with the provided arguments
             mp_call_function_n_kw(item->callback_function, item->num_args, 0, item->args);
-        }
+        }    
 
         // Free the allocated callback item
         free(item);
-    }
+    }    
 }
 
 // Ultra-generic function to schedule any callback with any arguments
 static esp_err_t schedule_generic_callback(mp_obj_t callback_function, uint8_t num_args, mp_obj_t *args)
 {
+    ESP_LOGE(TAG, "Scheduling generic callback");
+
     if (callback_queue == NULL) {
         ESP_LOGE(TAG, "Callback queue not initialized");
         return ESP_FAIL;
-    }
+    }    
     
     if (callback_function == mp_const_none) {
         return ESP_OK; // No callback registered, that's fine
-    }
+    }    
     
     // Allocate memory for the callback item + arguments
     size_t item_size = sizeof(generic_callback_item_t) + (num_args * sizeof(mp_obj_t));
@@ -65,14 +76,14 @@ static esp_err_t schedule_generic_callback(mp_obj_t callback_function, uint8_t n
     if (item == NULL) {
         ESP_LOGE(TAG, "Failed to allocate callback item");
         return ESP_FAIL;
-    }
+    }    
     
     // Fill in the callback item
     item->callback_function = callback_function;
     item->num_args = num_args;
     for (uint8_t i = 0; i < num_args; i++) {
         item->args[i] = args[i];
-    }
+    }    
     
     // Queue the pointer to the item (not the item itself)
     uintptr_t item_ptr = (uintptr_t)item;
@@ -81,68 +92,39 @@ static esp_err_t schedule_generic_callback(mp_obj_t callback_function, uint8_t n
         ESP_LOGW(TAG, "Failed to queue generic callback");
         free(item);
         return ESP_FAIL;
-    }
+    }    
     
     // Schedule processing (safe to call multiple times)
-    mp_sched_schedule_node(&callback_node, process_generic_callbacks);
+    if (callback_function == identify_callback) {
+        bool result = mp_sched_schedule_node(&callback_node1, process_generic_callbacks);
+        if (!result) {
+            ESP_LOGE(TAG, "Failed to schedule generic callback");
+            return ESP_FAIL;
+        }    
+    } else if (callback_function == event_callback) {
+        bool result = mp_sched_schedule_node(&callback_node2, process_generic_callbacks);
+        if (!result) {
+            ESP_LOGE(TAG, "Failed to schedule generic callback");
+            return ESP_FAIL;    
+        }
+    } else if (callback_function == attribute_callback) {
+        bool result = mp_sched_schedule_node(&callback_node3, process_generic_callbacks);
+        if (!result) {
+            ESP_LOGE(TAG, "Failed to schedule generic callback");
+            return ESP_FAIL;
+        }    
+    }    
     return ESP_OK;
-}
-
-// Simple storage for the attribute callback
-static mp_obj_t attribute_callback = mp_const_none;
-// for identify callback
-static mp_obj_t identify_callback = mp_const_none;
+}    
 
 static void app_event_cb(const ChipDeviceEvent *event, intptr_t arg)
 {
-    switch (event->Type) {
-    case chip::DeviceLayer::DeviceEventType::kInterfaceIpAddressChanged:
-        ESP_LOGI(TAG, "Interface IP Address changed");
-        break;
-
-    case chip::DeviceLayer::DeviceEventType::kCommissioningComplete:
-        ESP_LOGI(TAG, "Commissioning complete");
-        break;
-
-    case chip::DeviceLayer::DeviceEventType::kFailSafeTimerExpired:
-        ESP_LOGI(TAG, "Commissioning failed, fail safe timer expired");
-        break;
-
-    case chip::DeviceLayer::DeviceEventType::kCommissioningSessionStarted:
-        ESP_LOGI(TAG, "Commissioning session started");
-        break;
-
-    case chip::DeviceLayer::DeviceEventType::kCommissioningSessionStopped:
-        ESP_LOGI(TAG, "Commissioning session stopped");
-        break;
-
-    case chip::DeviceLayer::DeviceEventType::kCommissioningWindowOpened:
-        ESP_LOGI(TAG, "Commissioning window opened");
-        break;
-
-    case chip::DeviceLayer::DeviceEventType::kCommissioningWindowClosed:
-        ESP_LOGI(TAG, "Commissioning window closed");
-        break;
-
-    case chip::DeviceLayer::DeviceEventType::kFabricWillBeRemoved:
-        ESP_LOGI(TAG, "Fabric will be removed");
-        break;
-
-    case chip::DeviceLayer::DeviceEventType::kFabricUpdated:
-        ESP_LOGI(TAG, "Fabric is updated");
-        break;
-
-    case chip::DeviceLayer::DeviceEventType::kFabricCommitted:
-        ESP_LOGI(TAG, "Fabric is committed");
-        break;
-
-    case chip::DeviceLayer::DeviceEventType::kBLEDeinitialized:
-        ESP_LOGI(TAG, "BLE deinitialized and memory reclaimed");
-        break;
-
-    default:
-        break;
+    if (event_callback == mp_const_none) {
+        return;
     }
+
+    mp_obj_t args[1] = { mp_obj_new_int(event->Type) };
+    schedule_generic_callback(event_callback, 1, args);
 }
 
 // may be for enum/class stuff, we can write the matter.py wrappers which uses this base layer and introduce the
@@ -151,12 +133,13 @@ static void app_event_cb(const ChipDeviceEvent *event, intptr_t arg)
 static esp_err_t app_identification_cb(identification::callback_type_t type, uint16_t endpoint_id, uint8_t effect_id,
                                        uint8_t effect_variant, void *priv_data)
 {
-    mp_obj_t args[3] = {
+    mp_obj_t args[4] = {
         mp_obj_new_int(type),
+        mp_obj_new_int(endpoint_id),
         mp_obj_new_int(effect_id),
         mp_obj_new_int(effect_variant)
     };
-    schedule_generic_callback(identify_callback, 3, args);
+    schedule_generic_callback(identify_callback, 4, args);
 
     return ESP_OK;
 }
@@ -197,7 +180,7 @@ static esp_err_t init_callback_system()
         ESP_LOGE(TAG, "Failed to create callback queue");
         return ESP_FAIL;
     }
-    
+
     ESP_LOGI(TAG, "Generic callback system initialized");
     return ESP_OK;
 }
@@ -234,7 +217,7 @@ static esp_err_t app_attribute_update_cb(attribute::callback_type_t type, uint16
 extern "C" {
 #endif
 
-esp_err_t matter_init(mp_obj_t py_attribute_cb_in, mp_obj_t py_identify_cb_in)
+esp_err_t matter_init(mp_obj_t py_attribute_cb_in, mp_obj_t py_identify_cb_in, mp_obj_t py_event_cb_in)
 {
     nvs_flash_init();
 
@@ -246,6 +229,7 @@ esp_err_t matter_init(mp_obj_t py_attribute_cb_in, mp_obj_t py_identify_cb_in)
 
     attribute_callback = py_attribute_cb_in;
     identify_callback = py_identify_cb_in;
+    event_callback = py_event_cb_in;
 
     ESP_LOGI(TAG, "Initialized Matter with python attribute callback");
 
