@@ -68,8 +68,7 @@ set(MATTER_SDK_PATH ${ESP_MATTER_PATH}/connectedhomeip/connectedhomeip)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
 # Set the location of the main component for the project (one per target).
-list(APPEND EXTRA_COMPONENT_DIRS "${ESP_MATTER_PATH}/examples/common"
-                                 "${MATTER_SDK_PATH}/config/esp32/components"
+list(APPEND EXTRA_COMPONENT_DIRS "${MATTER_SDK_PATH}/config/esp32/components"
                                  "${ESP_MATTER_PATH}/components"
                                  main_${IDF_TARGET})
 
