@@ -130,6 +130,7 @@ list(APPEND MICROPY_SOURCE_PORT
     modmatter.c
     matter/matter_flags.cpp
     matter/matter_main.cpp
+    matter/matter_devices.c
 )
 list(TRANSFORM MICROPY_SOURCE_PORT PREPEND ${MICROPY_PORT_DIR}/)
 list(APPEND MICROPY_SOURCE_PORT ${CMAKE_BINARY_DIR}/pins.c)

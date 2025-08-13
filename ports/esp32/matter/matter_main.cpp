@@ -68,7 +68,7 @@ static esp_err_t schedule_generic_callback(mp_obj_t callback_function, uint8_t n
     
     if (callback_function == mp_const_none) {
         return ESP_OK; // No callback registered, that's fine
-    }    
+    }
     
     // Allocate memory for the callback item + arguments
     size_t item_size = sizeof(generic_callback_item_t) + (num_args * sizeof(mp_obj_t));
@@ -213,23 +213,100 @@ static esp_err_t app_attribute_update_cb(attribute::callback_type_t type, uint16
     return ESP_OK;
 }
 
+// Very very generic way to create a matter certifiable device
+template <typename T>
+using create_func_t = endpoint_t* (*)(node_t *node, T *config, uint8_t flags, void *priv_data);
+
+// On-Off Light Device
+template <typename T>
+static mp_obj_t matter_device_create(T *config, create_func_t<T> create_func)
+{
+    node_t *node = esp_matter::node::get();
+    if (node == nullptr) {
+        mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("Matter node not initialized. Call matter.start() first."));
+    }
+
+    endpoint_t *endpoint = create_func(node, config, 0, nullptr);
+    if (endpoint == nullptr) {
+        mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("Failed to create on-off light endpoint"));
+    }
+
+    return mp_obj_new_int(endpoint::get_id(endpoint));
+}
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-esp_err_t matter_init(mp_obj_t py_attribute_cb_in, mp_obj_t py_identify_cb_in, mp_obj_t py_event_cb_in)
+// Lights
+mp_obj_t matter_device_on_off_light_create()
 {
+    on_off_light::config_t config;
+    return matter_device_create<on_off_light::config_t>(&config, on_off_light::create);
+}
+
+mp_obj_t matter_device_dimmable_light_create()
+{
+    dimmable_light::config_t config;
+    return matter_device_create<dimmable_light::config_t>(&config, dimmable_light::create);
+}
+
+mp_obj_t matter_device_color_temperature_light_create()
+{
+    color_temperature_light::config_t config;
+    return matter_device_create<color_temperature_light::config_t>(&config, color_temperature_light::create);
+}
+
+mp_obj_t matter_device_extended_color_light_create()
+{
+    extended_color_light::config_t config;
+    return matter_device_create<extended_color_light::config_t>(&config, extended_color_light::create);
+}
+
+// Switches
+mp_obj_t matter_device_on_off_switch_create()
+{
+    on_off_switch::config_t config;
+    return matter_device_create<on_off_switch::config_t>(&config, on_off_switch::create);
+}
+
+mp_obj_t matter_device_dimmer_switch_create()
+{
+    dimmer_switch::config_t config;
+    return matter_device_create<dimmer_switch::config_t>(&config, dimmer_switch::create);
+}
+
+mp_obj_t matter_device_color_dimmer_switch_create()
+{
+    color_dimmer_switch::config_t config;
+    return matter_device_create<color_dimmer_switch::config_t>(&config, color_dimmer_switch::create);
+}
+
+mp_obj_t matter_device_generic_switch_create()
+{
+    generic_switch::config_t config;
+    return matter_device_create<generic_switch::config_t>(&config, generic_switch::create);
+}
+
+mp_obj_t matter_node_create(mp_obj_t py_attribute_cb_in, mp_obj_t py_identify_cb_in)
+{
+    if (!mp_obj_is_callable(py_attribute_cb_in)) {
+        return mp_obj_new_int(ESP_ERR_INVALID_ARG);
+    }
+    if (!mp_obj_is_callable(py_identify_cb_in)) {
+        return mp_obj_new_int(ESP_ERR_INVALID_ARG);
+    }
+
     nvs_flash_init();
 
     // Initialize the callback system
     esp_err_t ret = init_callback_system();
     if (ret != ESP_OK) {
-        return ret;
+        return mp_obj_new_int(ret);
     }
 
     attribute_callback = py_attribute_cb_in;
     identify_callback = py_identify_cb_in;
-    event_callback = py_event_cb_in;
 
     ESP_LOGI(TAG, "Initialized Matter with python attribute callback");
 
@@ -238,22 +315,30 @@ esp_err_t matter_init(mp_obj_t py_attribute_cb_in, mp_obj_t py_identify_cb_in, m
 
     if (!node) {
         ESP_LOGE(TAG, "Failed to create node");
-        return ESP_FAIL;
+        return mp_obj_new_int(ESP_FAIL);
+    }
+    return mp_obj_new_int(ESP_OK);
+}
+
+mp_obj_t matter_start(mp_obj_t py_event_cb_in)
+{
+    if (!mp_obj_is_callable(py_event_cb_in)) {
+        return mp_obj_new_int(ESP_ERR_INVALID_ARG);
     }
 
-    extended_color_light::config_t light_config;
-    endpoint_t *endpoint = extended_color_light::create(node, &light_config, ENDPOINT_FLAG_NONE, nullptr);
+    if (node::get() == nullptr) {
+        ESP_LOGE(TAG, "Matter node not initialized. Call matter.node_create() first.");
+        return mp_obj_new_int(ESP_ERR_INVALID_STATE);
+    }
 
-    uint16_t light_endpoint_id = endpoint::get_id(endpoint);
-    ESP_LOGI(TAG, "Light created with endpoint_id %d", light_endpoint_id);
+    event_callback = py_event_cb_in;
 
     esp_err_t err = esp_matter::start(app_event_cb);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to start Matter stack");
-        return err;
+        return mp_obj_new_int(err);
     }
-
-    return ESP_OK;
+    return mp_obj_new_int(ESP_OK);
 }
 
 #ifdef __cplusplus
